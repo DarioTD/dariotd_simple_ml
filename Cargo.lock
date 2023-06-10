@@ -62,7 +62,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "simple-ml"
+name = "simple-ml-gates"
 version = "0.1.0"
 dependencies = [
  "rand",

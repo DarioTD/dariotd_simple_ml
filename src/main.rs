@@ -1,42 +1,51 @@
 use rand::Rng;
 
-const TRAINING_SET: [(f64, f64); 5] = [(0.0, 0.0), (1.0, 2.0), (2.0, 4.0), (3.0, 6.0), (4.0, 8.0)];
+const TRAINING_SET: [(f64, f64, f64); 4] = [
+    (0.0, 0.0, 0.0),
+    (1.0, 0.0, 1.0),
+    (0.0, 1.0, 1.0),
+    (1.0, 1.0, 1.0),
+];
 
-fn cost(weight: f64, bias: f64) -> f64 {
+fn cost(w1: f64, w2: f64) -> f64 {
     let mut result = 0.0;
     for i in 0..TRAINING_SET.len() {
-        let input = TRAINING_SET[i].0;
-        let expected_output = TRAINING_SET[i].1;
-        let output = input * weight + bias;
-        let distance = output - expected_output;
-        result += f64::abs(distance * distance * distance);
+        let x1 = TRAINING_SET[i].0;
+        let x2 = TRAINING_SET[i].1;
+        let y = x1 * w1 + x2 * w2;
+        let d = y - TRAINING_SET[i].2;
+        result += f64::abs(d * d * d);
     }
     result /= TRAINING_SET.len() as f64;
     result
 }
 
 fn main() {
-    // output = input * weight `weight` 1 parameter
-    let mut weight = rand::thread_rng().gen_range(0.0..=20.0);
-    let mut bias = rand::thread_rng().gen_range(0.0..=10.0);
-    let weight1 = weight;
-    let bias1 = bias;
+    let mut w1 = rand::thread_rng().gen_range(0.0..=10.0);
+    let mut w2 = rand::thread_rng().gen_range(0.0..=10.0);
+    let o_w1 = w1;
+    let o_w2 = w2;
     let rate = 1e-2;
-    let eps = 1e-3;
+    let eps = 1e-2;
 
-    for _ in 0..1_000_000 {
-        let c = cost(weight, bias);
-        let d_weight = (cost(weight + eps, bias) - c) / weight;
-        let d_bias = (cost(weight, bias + eps) - c) / weight;
-        weight -= rate * d_weight;
-        bias -= rate * d_bias;
+    for i in 0..10_000 {
+        let c = cost(w1, w2);
+        let d_w1 = (cost(w1 + eps, w2) - c) / w1;
+        let d_w2 = (cost(w1, w2 + eps) - c) / w2;
+        w1 -= rate * d_w1;
+        w2 -= rate * d_w2;
+        println!("{i} = w1: {}, w2: {}, c: {}", w1, w2, cost(w1, w2));
     }
+    println!("-------------------------------");
     println!();
-    println!("Original = weight: {}, bias: {}", weight1, bias1);
-    println!(
-        "Final = weight: {}, bias: {}, cost: {}",
-        weight,
-        bias,
-        cost(weight, bias)
-    );
+    println!("Original = w1: {}, w2: {}", o_w1, o_w2);
+    println!("Final = w1: {}, w2: {}, c: {}", w1, w2, cost(w1, w2));
+    println!();
+    for i in 0..TRAINING_SET.len() {
+        let x1 = TRAINING_SET[i].0;
+        let x2 = TRAINING_SET[i].1;
+        let ex_out = TRAINING_SET[i].2;
+        let y = x1 * w1 + x2 * w2;
+        println!("x1: {}, x2: {}, ex_out: {}, y: {}", x1, x2, ex_out, y);
+    }
 }
