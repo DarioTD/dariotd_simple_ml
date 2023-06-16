@@ -32,11 +32,11 @@ struct Neuron2in {
 }
 
 #[derive(Debug)]
-struct Xor {
+struct Model {
     n: [Neuron2in; 3],
 }
 
-impl Xor {
+impl Model {
     fn new() -> Self {
         let n = [
             Neuron2in {
@@ -55,8 +55,9 @@ impl Xor {
                 b: 0.0,
             },
         ];
-        Xor { n }
+        Self { n }
     }
+
     fn new_rand() -> Self {
         let n = [
             Neuron2in {
@@ -75,7 +76,55 @@ impl Xor {
                 b: rand::thread_rng().gen_range(0.0..=1.0),
             },
         ];
-        Xor { n }
+        Self { n }
+    }
+
+    fn apply_diff(&mut self, g: Self, rate: f64) {
+        for i in 0..g.n.len() {
+            self.n[i].w1 -= rate * g.n[i].w1;
+            self.n[i].w2 -= rate * g.n[i].w2;
+            self.n[i].b -= rate * g.n[i].b;
+        }
+    }
+
+    fn cost(&self) -> f64 {
+        TRAINING_SET.iter().fold(0.0, |acc, i| {
+            let x1 = i[0];
+            let x2 = i[1];
+            let y = self.forward(x1, x2);
+            let d = y - i[2];
+            acc + f64::abs(d * d * d)
+        }) / TRAINING_SET.len() as f64
+    }
+
+    fn finite_diff(&mut self, eps: f64) -> Self {
+        let mut g = Model::new();
+
+        for i in 0..self.n.len() {
+            let c = self.cost();
+
+            let original_val = self.n[i].w1;
+            self.n[i].w1 += eps;
+            g.n[i].w1 = (self.cost() - c) / eps;
+            self.n[i].w1 = original_val;
+
+            let original_val = self.n[i].w2;
+            self.n[i].w2 += eps;
+            g.n[i].w2 = (self.cost() - c) / eps;
+            self.n[i].w2 = original_val;
+
+            let original_val = self.n[i].b;
+            self.n[i].b += eps;
+            g.n[i].b = (self.cost() - c) / eps;
+            self.n[i].b = original_val;
+        }
+        g
+    }
+
+    fn forward(&self, x1: f64, x2: f64) -> f64 {
+        let a = ATC_M.activate(x1 * self.n[0].w1 + x2 * self.n[0].w2 + self.n[0].b);
+        let b = ATC_M.activate(x1 * self.n[1].w1 + x2 * self.n[1].w2 + self.n[1].b);
+        ATC_M.activate(a * self.n[2].w1 + b * self.n[2].w2 + self.n[2].b)
     }
 }
 
@@ -115,60 +164,13 @@ const _NXOR_TRAINING_SET: [[f64; 3]; 4] = [
     [0.0, 1.0, 0.0],
     [1.0, 1.0, 1.0],
 ];
+
 const TRAINING_SET: &[[f64; 3]; 4] = &_XOR_TRAINING_SET;
 const ATC_M: Act = Act::Sigmoid;
 
-fn apply_diff(m: &mut Xor, g: Xor, rate: f64) {
-    for i in 0..g.n.len() {
-        m.n[i].w1 -= rate * g.n[i].w1;
-        m.n[i].w2 -= rate * g.n[i].w2;
-        m.n[i].b -= rate * g.n[i].b;
-    }
-}
-
-fn cost(m: &Xor) -> f64 {
-    TRAINING_SET.iter().fold(0.0, |acc, i| {
-        let x1 = i[0];
-        let x2 = i[1];
-        let y = forwarding(m, x1, x2);
-        let d = y - i[2];
-        acc + f64::abs(d * d * d)
-    }) / TRAINING_SET.len() as f64
-}
-
-fn finite_diff(m: &mut Xor, eps: f64) -> Xor {
-    let mut g = Xor::new();
-
-    for i in 0..m.n.len() {
-        let c = cost(m);
-
-        let original = m.n[i].w1;
-        m.n[i].w1 += eps;
-        g.n[i].w1 = (cost(m) - c) / eps;
-        m.n[i].w1 = original;
-
-        let original = m.n[i].w2;
-        m.n[i].w2 += eps;
-        g.n[i].w2 = (cost(m) - c) / eps;
-        m.n[i].w2 = original;
-
-        let original = m.n[i].b;
-        m.n[i].b += eps;
-        g.n[i].b = (cost(m) - c) / eps;
-        m.n[i].b = original;
-    }
-    g
-}
-
-fn forwarding(m: &Xor, x: f64, y: f64) -> f64 {
-    let a = ATC_M.activate(x * m.n[0].w1 + y * m.n[0].w2 + m.n[0].b);
-    let b = ATC_M.activate(x * m.n[1].w1 + y * m.n[1].w2 + m.n[1].b);
-    ATC_M.activate(a * m.n[2].w1 + b * m.n[2].w2 + m.n[2].b)
-}
-
 fn main() {
-    let mut m = Xor::new_rand();
-    let c = cost(&m);
+    let mut m = Model::new_rand();
+    let c = m.cost();
     println!("Original = m: {:#?}", m);
     println!("cost: {c}");
     println!();
@@ -176,23 +178,23 @@ fn main() {
     let eps = 1e-3;
 
     for _ in 0..1_000_000 {
-        let g = finite_diff(&mut m, eps);
-        apply_diff(&mut m, g, rate);
+        let g = m.finite_diff(eps);
+        m.apply_diff(g, rate);
         //println!("{i} = m: {:#?}", m);
-        //println!("cost: {}", cost(&m));
+        //println!("cost: {}", m.cost());
         //println!();
     }
     println!("-------------------------------");
     println!("activation method: {:?}", ATC_M);
     println!();
     println!("Final = m: {:#?}", m);
-    println!("cost: {}", cost(&m));
+    println!("cost: {}", m.cost());
     println!();
     for i in TRAINING_SET {
         let x1 = i[0];
         let x2 = i[1];
         let ex_out = i[2];
-        let y = forwarding(&m, x1, x2);
+        let y = m.forward(x1, x2);
         println!("x1: {}, x2: {}, ex_out: {}, y: {}", x1, x2, ex_out, y);
     }
     println!("-------------------------------");
