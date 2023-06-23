@@ -12,10 +12,10 @@ enum Act {
 impl Act {
     fn activate(&self, x: f64) -> f64 {
         match self {
-            Act::None => x,
-            Act::Sigmoid => Act::sigmoid(x),
-            Act::Sine => x.sin(),
-            Act::Tanh => x.tanh(),
+            Self::None => x,
+            Self::Sigmoid => Self::sigmoid(x),
+            Self::Sine => x.sin(),
+            Self::Tanh => x.tanh(),
         }
     }
 
@@ -37,7 +37,7 @@ struct Model {
 }
 
 impl Model {
-    fn new() -> Self {
+    const fn new() -> Self {
         let n = [
             Neuron2in {
                 w1: 0.0,
@@ -79,7 +79,7 @@ impl Model {
         Self { n }
     }
 
-    fn apply_diff(&mut self, g: Self, rate: f64) {
+    fn apply_diff(&mut self, g: &Self, rate: f64) {
         for i in 0..g.n.len() {
             self.n[i].w1 -= rate * g.n[i].w1;
             self.n[i].w2 -= rate * g.n[i].w2;
@@ -98,7 +98,7 @@ impl Model {
     }
 
     fn finite_diff(&mut self, eps: f64) -> Self {
-        let mut g = Model::new();
+        let mut g = Self::new();
 
         for i in 0..self.n.len() {
             let c = self.cost();
@@ -122,9 +122,9 @@ impl Model {
     }
 
     fn forward(&self, x1: f64, x2: f64) -> f64 {
-        let a = ATC_M.activate(x1 * self.n[0].w1 + x2 * self.n[0].w2 + self.n[0].b);
-        let b = ATC_M.activate(x1 * self.n[1].w1 + x2 * self.n[1].w2 + self.n[1].b);
-        ATC_M.activate(a * self.n[2].w1 + b * self.n[2].w2 + self.n[2].b)
+        let a = ATC_M.activate(x1.mul_add(self.n[0].w1, x2 * self.n[0].w2) + self.n[0].b);
+        let b = ATC_M.activate(x1.mul_add(self.n[1].w1, x2 * self.n[1].w2) + self.n[1].b);
+        ATC_M.activate(a.mul_add(self.n[2].w1, b * self.n[2].w2) + self.n[2].b)
     }
 }
 
@@ -171,7 +171,7 @@ const ATC_M: Act = Act::Sigmoid;
 fn main() {
     let mut m = Model::new_rand();
     let c = m.cost();
-    println!("Original = m: {:#?}", m);
+    println!("Original = m: {m:#?}");
     println!("cost: {c}");
     println!();
     let rate = 1e-2;
@@ -179,15 +179,15 @@ fn main() {
 
     for _ in 0..1_000_000 {
         let g = m.finite_diff(eps);
-        m.apply_diff(g, rate);
-        //println!("{i} = m: {:#?}", m);
+        m.apply_diff(&g, rate);
+        //println!("{i} = m: {m:#?}");
         //println!("cost: {}", m.cost());
         //println!();
     }
     println!("-------------------------------");
-    println!("activation method: {:?}", ATC_M);
+    println!("activation method: {ATC_M:?}");
     println!();
-    println!("Final = m: {:#?}", m);
+    println!("Final = m: {m:#?}");
     println!("cost: {}", m.cost());
     println!();
     for i in TRAINING_SET {
@@ -195,17 +195,16 @@ fn main() {
         let x2 = i[1];
         let ex_out = i[2];
         let y = m.forward(x1, x2);
-        println!("x1: {}, x2: {}, ex_out: {}, y: {}", x1, x2, ex_out, y);
+        println!("x1: {x1}, x2: {x2}, ex_out: {ex_out}, y: {y}");
     }
     println!("-------------------------------");
     println!("a:");
     for i in 0..2 {
         for j in 0..2 {
             println!(
-                "{} | {} = {}",
-                i,
-                j,
-                ATC_M.activate(i as f64 * m.n[0].w1 + j as f64 * m.n[0].w2 + m.n[0].b)
+                "{i} | {j} = {}",
+                ATC_M
+                    .activate(f64::from(i).mul_add(m.n[0].w1, f64::from(j) * m.n[0].w2) + m.n[0].b)
             );
         }
     }
@@ -213,10 +212,9 @@ fn main() {
     for i in 0..2 {
         for j in 0..2 {
             println!(
-                "{} | {} = {}",
-                i,
-                j,
-                ATC_M.activate(i as f64 * m.n[1].w1 + j as f64 * m.n[1].w2 + m.n[1].b)
+                "{i} | {j} = {}",
+                ATC_M
+                    .activate(f64::from(i).mul_add(m.n[1].w1, f64::from(j) * m.n[1].w2) + m.n[1].b)
             );
         }
     }
@@ -224,10 +222,9 @@ fn main() {
     for i in 0..2 {
         for j in 0..2 {
             println!(
-                "{} | {} = {}",
-                i,
-                j,
-                ATC_M.activate(i as f64 * m.n[2].w1 + j as f64 * m.n[2].w2 + m.n[2].b)
+                "{i} | {j} = {}",
+                ATC_M
+                    .activate(f64::from(i).mul_add(m.n[2].w1, f64::from(j) * m.n[2].w2) + m.n[2].b)
             );
         }
     }
