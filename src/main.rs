@@ -1,64 +1,77 @@
-use simple_ml_gates_xor_sigm::{Model, ATC_M, TRAINING_SET};
+use dariotd_simple_ml::{Model, ATC_M, TRAINING_SET};
 
 fn main() {
-    let mut m = Model::new_rand();
-    let c = m.cost();
-    println!("Original = m: {m:#?}");
-    println!("cost: {c}");
+    let n_neurons = 3;
+    let mut model = Model::build(n_neurons);
+    let cost = model.cost(&TRAINING_SET);
+    println!("Original: {model:#?}");
+    println!("cost: {cost}");
     println!();
-    let rate = 1e-2;
+    let rate = 1e-1;
     let eps = 1e-3;
+    let n_iterations = 100_000;
 
-    for _ in 0..1_000_000 {
-        let g = m.finite_diff(eps);
-        m.apply_diff(&g, rate);
-        //println!("{i} = m: {m:#?}");
-        //println!("cost: {}", m.cost());
+    for _ in 0..n_iterations {
+        let gradient = model.finite_diff(eps);
+        model.apply_diff(&gradient, rate);
+        //println!("{i}: {model:#?}");
+        //println!("cost: {}", model.cost(&TRAINING_SET));
         //println!();
     }
     println!("-------------------------------");
     println!("activation method: {ATC_M:?}");
     println!();
-    println!("Final = m: {m:#?}");
-    println!("cost: {}", m.cost());
+    println!("Final: {model:#?}");
+    println!("cost: {}", model.cost(&TRAINING_SET));
     println!();
-    for i in TRAINING_SET {
-        let x1 = i[0];
-        let x2 = i[1];
-        let ex_out = i[2];
-        let y = m.forward(x1, x2);
-        println!("x1: {x1}, x2: {x2}, ex_out: {ex_out}, y: {y}");
+    for i in &TRAINING_SET {
+        let input = vec![i[0], i[1]];
+        let exp_output = i[2];
+        let output = model.forward(&input);
+        println!("{input:?}, exp_output: {exp_output}, output: {output}");
     }
     println!("-------------------------------");
     println!("a:");
+    println!(" in_1 | in_2 ");
     for i in 0..2 {
         for j in 0..2 {
             println!(
-                "{i} | {j} = {}",
-                ATC_M
-                    .activate(f64::from(i).mul_add(m.n[0].w1, f64::from(j) * m.n[0].w2) + m.n[0].b)
+                "   {i}  |  {j}    = {}",
+                ATC_M.apply_act(
+                    model.neurons[0].bias
+                        + f64::from(i) * model.neurons[0].weights[0]
+                        + f64::from(j) * model.neurons[0].weights[1]
+                )
             );
         }
     }
-    println!("b:");
-    for i in 0..2 {
-        for j in 0..2 {
-            println!(
-                "{i} | {j} = {}",
-                ATC_M
-                    .activate(f64::from(i).mul_add(m.n[1].w1, f64::from(j) * m.n[1].w2) + m.n[1].b)
-            );
-        }
-    }
-    println!("c:");
-    println!("a | b");
     println!("--------------");
+    println!("b:");
+    println!(" in_1 | in_2 ");
     for i in 0..2 {
         for j in 0..2 {
             println!(
-                "{i} | {j} = {}",
-                ATC_M
-                    .activate(f64::from(i).mul_add(m.n[2].w1, f64::from(j) * m.n[2].w2) + m.n[2].b)
+                "   {i}  |  {j}    = {}",
+                ATC_M.apply_act(
+                    model.neurons[1].bias
+                        + f64::from(i) * model.neurons[1].weights[0]
+                        + f64::from(j) * model.neurons[1].weights[1]
+                )
+            );
+        }
+    }
+    println!("--------------");
+    println!("c:");
+    println!("   a  |  b   ");
+    for i in 0..2 {
+        for j in 0..2 {
+            println!(
+                "   {i}  |  {j}    = {}",
+                ATC_M.apply_act(
+                    model.neurons[1].bias
+                        + f64::from(i) * model.neurons[1].weights[0]
+                        + f64::from(j) * model.neurons[1].weights[1]
+                )
             );
         }
     }
