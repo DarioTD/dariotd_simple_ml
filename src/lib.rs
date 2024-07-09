@@ -1,12 +1,10 @@
-mod training_sets;
-
-pub const TRAINING_SET: [[f64; 3]; 4] = training_sets::_XOR;
-pub const ATC_M: Act = Act::Sigmoid;
+use rand::Rng;
 
 #[allow(dead_code)]
 #[derive(Debug)]
 pub enum Act {
     None,
+    Relu,
     Sigmoid,
     Sine,
     Tanh,
@@ -16,105 +14,228 @@ impl Act {
     pub fn apply_act(&self, x: f64) -> f64 {
         match self {
             Self::None => x,
-            Self::Sigmoid => Self::sigmoid(x),
-            Self::Sine => x.sin(),
-            Self::Tanh => x.tanh(),
+            Self::Relu => f64::max(0.0, x),
+            Self::Sigmoid => 1.0 / (1.0 + f64::exp(-x)),
+            Self::Sine => f64::sin(x),
+            Self::Tanh => f64::tanh(x),
         }
-    }
-
-    fn sigmoid(x: f64) -> f64 {
-        1.0 / (1.0 + f64::exp(-x))
     }
 }
 
 #[derive(Debug)]
 pub struct Neuron {
+    pub id: usize,
     pub bias: f64,
     pub weights: Vec<f64>,
 }
 
 #[derive(Debug)]
-pub struct Model {
+pub struct Layer {
+    pub id: usize,
     pub neurons: Vec<Neuron>,
 }
 
-impl Model {
-    pub fn build(n_neurons: usize) -> Self {
+#[derive(Debug)]
+pub struct Model<'a> {
+    pub act_mode: &'a Act,
+    pub training_data_set: &'a [(Vec<f64>, Vec<f64>)],
+    pub layers: Vec<Layer>,
+}
+
+impl Layer {
+    fn build(id: usize, n_neurons: usize, n_weights: usize) -> Self {
         let mut neurons = Vec::with_capacity(n_neurons);
-        for _ in 0..n_neurons {
-            neurons.push(Neuron {
-                bias: rand::random(),
-                weights: vec![rand::random(), rand::random()],
+        (0..n_neurons).for_each(|i| {
+            let mut weights = Vec::with_capacity(n_weights);
+            (0..n_weights).for_each(|_| {
+                weights.push(rand::thread_rng().gen_range(0.0..=4.0) - 2.0);
             });
-        }
-        Self { neurons }
+            neurons.push(Neuron {
+                id: i,
+                bias: rand::thread_rng().gen_range(0.0..=4.0) - 2.0,
+                weights,
+            });
+        });
+        Self { id, neurons }
     }
 
-    fn build_zeros(n_neurons: usize) -> Self {
+    fn build_with_zeros(id: usize, n_neurons: usize, n_weights: usize) -> Self {
         let mut neurons = Vec::with_capacity(n_neurons);
-        for _ in 0..n_neurons {
+        (0..n_neurons).for_each(|i| {
+            let mut weights = Vec::with_capacity(n_weights);
+            (0..n_weights).for_each(|_| {
+                weights.push(0.0);
+            });
             neurons.push(Neuron {
+                id: i,
                 bias: 0.0,
-                weights: vec![0.0, 0.0],
+                weights,
             });
-        }
-        Self { neurons }
+        });
+        Self { id, neurons }
+    }
+}
+
+impl<'a> Model<'a> {
+    pub fn apply_diff(&mut self, gradient: &Self, learning_rate: f64) {
+        self.layers
+            .iter_mut()
+            .zip(&gradient.layers)
+            .for_each(|(layer, g_layer)| {
+                layer
+                    .neurons
+                    .iter_mut()
+                    .zip(&g_layer.neurons)
+                    .for_each(|(neuron, g_neuron)| {
+                        neuron.bias -= learning_rate * g_neuron.bias;
+                        neuron.weights.iter_mut().zip(&g_neuron.weights).for_each(
+                            |(weight, g_weight)| {
+                                *weight -= learning_rate * g_weight;
+                            },
+                        );
+                    });
+            });
     }
 
-    pub fn apply_diff(&mut self, gradient: &Self, rate: f64) {
-        let n_neurons = self.neurons.len();
-        for i in 0..n_neurons {
-            self.neurons[i].bias -= rate * gradient.neurons[i].bias;
-            for j in 0..gradient.neurons[i].weights.len() {
-                self.neurons[i].weights[j] -= rate * gradient.neurons[i].weights[j];
-            }
+    pub fn build(
+        act_mode: &'a Act,
+        training_data_set: &'a [(Vec<f64>, Vec<f64>)],
+        n_neuron_per_layer: &[usize],
+    ) -> Self {
+        let mut n_layers = Vec::new();
+        let mut prev_n_neuron = vec![n_neuron_per_layer[0]];
+        n_neuron_per_layer
+            .iter()
+            .enumerate()
+            .for_each(|(id, &n_neuron)| {
+                n_layers.push((n_neuron, prev_n_neuron[id]));
+                prev_n_neuron.push(n_neuron);
+            });
+        let layers = n_layers
+            .iter()
+            .enumerate()
+            .map(|(id, &(n_neurons, n_weights))| Layer::build(id, n_neurons, n_weights))
+            .collect::<Vec<_>>();
+        Self {
+            act_mode,
+            training_data_set,
+            layers,
         }
     }
 
-    pub fn cost(&self, training_set: &[[f64; 3]; 4]) -> f64 {
-        training_set.iter().fold(0.0, |acc, i| {
-            let input = vec![i[0], i[1]];
-            let output = self.forward(&input);
-            let dis = output - i[2];
-            acc + f64::abs(dis * dis * dis)
-        }) / training_set.len() as f64
+    pub fn build_with_zeros(
+        act_mode: &'a Act,
+        training_data_set: &'a [(Vec<f64>, Vec<f64>)],
+        n_neuron_per_layer: &[usize],
+    ) -> Self {
+        let mut n_layers = Vec::new();
+        let mut prev_n_neuron = vec![n_neuron_per_layer[0]];
+        n_neuron_per_layer
+            .iter()
+            .enumerate()
+            .for_each(|(id, &n_neuron)| {
+                n_layers.push((n_neuron, prev_n_neuron[id]));
+                prev_n_neuron.push(n_neuron);
+            });
+        let layers = n_layers
+            .iter()
+            .enumerate()
+            .map(|(id, &(n_neurons, n_weights))| Layer::build_with_zeros(id, n_neurons, n_weights))
+            .collect::<Vec<_>>();
+        Self {
+            act_mode,
+            training_data_set,
+            layers,
+        }
+    }
+
+    pub fn cost(&self) -> f64 {
+        self.training_data_set
+            .iter()
+            .map(|(t_inputs, t_outputs)| {
+                let outputs = self.forward(t_inputs);
+                outputs
+                    .iter()
+                    .zip(t_outputs)
+                    .fold(0.0, |acc, (output, expected_output)| {
+                        let dis = output - expected_output;
+                        acc + dis * dis
+                    })
+                    / (outputs.len() as f64)
+            })
+            .sum::<f64>()
+            / (self.training_data_set.len() as f64)
     }
 
     pub fn finite_diff(&mut self, eps: f64) -> Self {
-        let n_neurons = self.neurons.len();
-        let mut gradient = Self::build_zeros(n_neurons);
+        let mut n_neuron_per_layer = Vec::new();
+        self.layers.iter().for_each(|layer| {
+            n_neuron_per_layer.push(layer.neurons.len());
+        });
+        let mut gradient =
+            Self::build_with_zeros(self.act_mode, self.training_data_set, &n_neuron_per_layer);
 
-        for i in 0..n_neurons {
-            let cost = self.cost(&TRAINING_SET);
+        for i in 0..gradient.layers.len() {
+            for j in 0..gradient.layers[i].neurons.len() {
+                let cost = self.cost();
 
-            let original_val = self.neurons[i].bias;
-            self.neurons[i].bias += eps;
-            gradient.neurons[i].bias = (self.cost(&TRAINING_SET) - cost) / eps;
-            self.neurons[i].bias = original_val;
+                let original_val = self.layers[i].neurons[j].bias;
+                self.layers[i].neurons[j].bias += eps;
+                gradient.layers[i].neurons[j].bias = (self.cost() - cost) / eps;
+                self.layers[i].neurons[j].bias = original_val;
 
-            for j in 0..self.neurons[i].weights.len() {
-                let original_val = self.neurons[i].weights[j];
-                self.neurons[i].weights[j] += eps;
-                gradient.neurons[i].weights[j] = (self.cost(&TRAINING_SET) - cost) / eps;
-                self.neurons[i].weights[j] = original_val;
+                for k in 0..self.layers[i].neurons[j].weights.len() {
+                    let original_val = self.layers[i].neurons[j].weights[k];
+                    self.layers[i].neurons[j].weights[k] += eps;
+                    gradient.layers[i].neurons[j].weights[k] = (self.cost() - cost) / eps;
+                    self.layers[i].neurons[j].weights[k] = original_val;
+                }
             }
         }
         gradient
     }
 
-    pub fn forward(&self, input: &[f64]) -> f64 {
-        let a = ATC_M.apply_act(
-            self.neurons[0].bias
-                + input[0] * self.neurons[0].weights[0]
-                + input[1] * self.neurons[0].weights[1],
+    pub fn forward(&self, inputs: &[f64]) -> Vec<f64> {
+        assert_eq!(self.layers[0].neurons[0].weights.len(), inputs.len());
+        let mut act_layers = Vec::new();
+        act_layers.push(
+            self.layers[0]
+                .neurons
+                .iter()
+                .map(|neuron| {
+                    Act::apply_act(
+                        self.act_mode,
+                        neuron
+                            .weights
+                            .iter()
+                            .zip(inputs)
+                            .map(|(weight, input)| weight * input)
+                            .sum::<f64>()
+                            + neuron.bias,
+                    )
+                })
+                .collect::<Vec<_>>(),
         );
-        let b = ATC_M.apply_act(
-            self.neurons[1].bias
-                + input[0] * self.neurons[1].weights[0]
-                + input[1] * self.neurons[1].weights[1],
-        );
-        ATC_M.apply_act(
-            self.neurons[2].bias + a * self.neurons[2].weights[0] + b * self.neurons[2].weights[1],
-        )
+        (1..self.layers.len()).for_each(|i| {
+            act_layers.push(
+                self.layers[i]
+                    .neurons
+                    .iter()
+                    .map(|neuron| {
+                        Act::apply_act(
+                            self.act_mode,
+                            neuron
+                                .weights
+                                .iter()
+                                .zip(act_layers.last().unwrap())
+                                .map(|(weight, input)| weight * input)
+                                .sum::<f64>()
+                                + neuron.bias,
+                        )
+                    })
+                    .collect::<Vec<_>>(),
+            );
+        });
+        act_layers.last().unwrap().clone()
     }
 }
