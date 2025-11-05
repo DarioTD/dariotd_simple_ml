@@ -28,9 +28,9 @@ fn main() {
         let prev_cost = model.cost();
         model.apply_diff(&gradient, rate);
         let cost = model.cost();
-        println!("iter: {i} -> {n_iterations}");
-        println!("cost: {cost}");
-        println!();
+        eprintln!("iter: {i} -> {n_iterations}");
+        eprintln!("cost: {cost}");
+        eprintln!();
         if cost > prev_cost {
             break;
         }
